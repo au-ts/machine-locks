@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["machine_locks_client", "machine_locks_server"]
