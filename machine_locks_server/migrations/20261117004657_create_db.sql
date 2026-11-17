@@ -7,8 +7,8 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS machines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    available BOOLEAN NOT NULL,  -- used to mark a board as down for maintenance
-    name TEXT NOT NULL,
+    available BOOLEAN NOT NULL DEFAULT FALSE CHECK (pxe_linux in (FALSE, TRUE)),  -- used to mark a board as down for maintenance
+    name TEXT NOT NULL UNIQUE,
     -- ipbench boards do not have any of the below columns
     poweroff_name TEXT,
     arch TEXT,
