@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs SET\n                            released_lock_at = CURRENT_TIMESTAMP\n                            WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "755163581860b7f81986efbd701dd805b6a6f520085bc83b5a5343815c075a58"
+}

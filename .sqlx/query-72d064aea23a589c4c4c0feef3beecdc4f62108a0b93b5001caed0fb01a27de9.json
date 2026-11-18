@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT available FROM machines WHERE id = ? AND available = TRUE",
+  "describe": {
+    "columns": [
+      {
+        "name": "available",
+        "ordinal": 0,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "available"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "72d064aea23a589c4c4c0feef3beecdc4f62108a0b93b5001caed0fb01a27de9"
+}

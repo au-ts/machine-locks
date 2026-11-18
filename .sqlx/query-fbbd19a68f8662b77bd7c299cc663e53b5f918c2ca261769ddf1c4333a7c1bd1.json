@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO jobs (timeout, priority, job_name, owner, machine_id) VALUES\n        (?, ?, ?, ?, ?)\n        RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fbbd19a68f8662b77bd7c299cc663e53b5f918c2ca261769ddf1c4333a7c1bd1"
+}

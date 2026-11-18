@@ -1,0 +1,122 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM jobs",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 1,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "acquired_lock_at",
+        "ordinal": 2,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "acquired_lock_at"
+          }
+        }
+      },
+      {
+        "name": "released_lock_at",
+        "ordinal": 3,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "released_lock_at"
+          }
+        }
+      },
+      {
+        "name": "timeout",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "timeout"
+          }
+        }
+      },
+      {
+        "name": "priority",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "priority"
+          }
+        }
+      },
+      {
+        "name": "job_name",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "job_name"
+          }
+        }
+      },
+      {
+        "name": "owner",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "owner"
+          }
+        }
+      },
+      {
+        "name": "machine_id",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "machine_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "96ef8ea48e1a054a1dc024d0c2e1d326703628ddf4a6fa7196a45bd539267fc0"
+}
