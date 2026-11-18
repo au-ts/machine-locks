@@ -23,7 +23,7 @@ use crate::routes::router;
 struct AppState {
     db: SqlitePool,
     /// Map from machine ID -> channel, where a broadcast indicates a change in the queue
-    /// Broadcast is sent whenever a lock is released or times out
+    /// Broadcast is sent whenever a lock is released
     machine_channels: Arc<Mutex<HashMap<i64, broadcast::Sender<()>>>>,
 }
 
