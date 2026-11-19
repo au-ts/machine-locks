@@ -3,20 +3,21 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 //!
-//! Provided routes:
+//! Provided routes (not all implemented):
 //! - Get pools
-//! - [GET /machines]           Get machines (w/ lock/unlocked status)
-//! - [GET /jobs]               Get system job list
+//! - [GET /machines]               Get machines
+//! - [GET /machines/<id>/job]      Get jobs for a machine
+//! - [GET /jobs]                   Get system job list
 //! - Post job to pool
 //! - Post job to system
-//! - [GET /jobs/<id>/poll]     Poll job
-//! - [POST /jobs/<id>/release] Release job
-//! - [DELETE /jobs/<id>]       Cancel job
+//! - [GET /jobs/<id>/poll]         Poll job
+//! - [POST /jobs/<id>/release]     Release job
+//! - [DELETE /jobs/<id>]           Cancel job
 //! - Forcibly cancel all jobs for machine
 //!
-//! - [POST /machines]          Create machine
+//! - [POST /machines]              Create machine
 //! - Edit machine
-//! - [DELETE /machines/<id>]   Delete machine
+//! - [DELETE /machines/<id>]       Delete machine
 //! - Create pool
 //! - Edit pool
 //! - Delete pool
@@ -30,7 +31,6 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use chrono::TimeDelta;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{query, query_as};
@@ -42,10 +42,30 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/machines", get(get_machines).post(create_machine))
         .route("/machines/{machine_id}", delete(delete_machine))
+        .route("/machines/{machine_id}/jobs", get(get_machine_jobs))
         .route("/jobs", get(get_jobs).post(create_job))
         .route("/jobs/{job_id}", delete(cancel_job))
         .route("/jobs/{job_id}/poll", get(poll_job))
         .route("/jobs/{job_id}/release", post(release_job))
+}
+
+async fn get_machine_jobs(
+    State(state): State<AppState>,
+    Path((id,)): Path<(i64,)>,
+) -> AppResult<impl IntoResponse> {
+    state.release_expired_lock(id).await?; // Idempotent
+    Ok(Json(
+        query_as!(
+            Job,
+            "
+        SELECT * FROM jobs
+        WHERE machine_id = ? AND released_lock_at IS NULL
+    ",
+            id
+        )
+        .fetch_all(&state.db)
+        .await?,
+    ))
 }
 
 async fn get_machines(State(state): State<AppState>) -> AppResult<impl IntoResponse> {
@@ -213,51 +233,13 @@ async fn poll_job(
         let mut receiver = state.get_or_create_sender(job.machine_id).subscribe();
 
         loop {
+            state.release_expired_lock(job.machine_id).await?; // Idempotent
             let next_job = state.query_next_job(job.machine_id).await?;
             let current_job = state.query_current_job(job.machine_id).await?;
 
             match (current_job, next_job) {
                 (Some(job), _) if job.id == id => {
                     // Already acquired
-                    return Ok(Json(PollStatus::JobReady(job)));
-                }
-                (
-                    Some(Job {
-                        acquired_lock_at: Some(acquired),
-                        timeout: Some(timeout),
-                        released_lock_at: _,
-                        priority: _,
-                        job_name: _,
-                        owner: _,
-                        machine_id: _,
-                        id: current_job_id,
-                        created_at: _,
-                    }),
-                    Some(next_job),
-                ) if next_job.id == id
-                    && acquired.and_utc() - chrono::Utc::now() > TimeDelta::seconds(timeout) =>
-                {
-                    // We are next job in line and current job timed out
-                    query!(
-                        "UPDATE jobs SET
-                            released_lock_at = CURRENT_TIMESTAMP
-                            WHERE id = ?",
-                        current_job_id
-                    )
-                    .execute(&state.db)
-                    .await?;
-
-                    let job = query_as!(
-                        Job,
-                        "UPDATE jobs SET
-                            acquired_lock_at = CURRENT_TIMESTAMP
-                            WHERE id = ?
-                            RETURNING *",
-                        id
-                    )
-                    .fetch_one(&state.db)
-                    .await?;
-
                     return Ok(Json(PollStatus::JobReady(job)));
                 }
                 (None, Some(job)) if job.id == id => {
@@ -270,7 +252,7 @@ async fn poll_job(
                         id
                     )
                     .fetch_one(&state.db)
-                    .await?;
+                    .await?; // This operation is idempotent
 
                     return Ok(Json(PollStatus::JobReady(job)));
                 }
