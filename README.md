@@ -1,7 +1,5 @@
 # machine-locks
 
-Server for locking mq.sh and iq.sh. Hamzah's project
-
 ## Design
 
 This repository is split into a HTTP server and a CLI client to be called by
@@ -13,3 +11,6 @@ release the job. This also means a single user can push multiple jobs to run in
 succession, which was not possible in the old locking interface. Polling a job
 is done with HTTP long polling (the server keeps open the connection for some time)
 to reduce overhead and allow clients to acquire locks sooner.
+
+Visit documentation for the [server](./machine_locks_server/README.md) or the
+[client](./machine_locks_client/README.md) in their respective READMEs.
