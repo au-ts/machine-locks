@@ -1,3 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["machine_locks_client", "machine_locks_server"]
+members = ["common", "machine_locks_client", "machine_locks_server"]
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3

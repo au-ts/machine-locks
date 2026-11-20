@@ -11,9 +11,8 @@ use std::{
 
 use anyhow::Result;
 use axum::{http::StatusCode, response::IntoResponse};
-use chrono::NaiveDateTime;
+use common::Job;
 use log::{error, info};
-use serde::{Deserialize, Serialize};
 use sqlx::{SqlitePool, migrate, query, query_as, sqlite::SqliteConnectOptions};
 use tokio::{net::TcpListener, sync::broadcast};
 
@@ -120,58 +119,6 @@ async fn main() -> Result<()> {
     info!("Serving at http://localhost:3000");
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct Machine {
-    #[serde(default)]
-    id: i64,
-    #[serde(default)]
-    created_at: NaiveDateTime,
-    #[serde(default)]
-    available: bool,
-    name: String,
-    poweroff_name: Option<String>,
-    arch: Option<String>,
-    sel4_plat: Option<String>,
-    isa: Option<String>,
-    soc: Option<String>,
-    cpu: Option<String>,
-    cores: Option<String>,
-    ram: Option<i64>,
-    max_clk: Option<f64>,
-    num_files: Option<i64>,
-    linux_num_files: Option<i64>,
-    #[serde(default)]
-    pxe_linux: bool,
-    #[serde(default)]
-    dtb: bool,
-}
-
-fn default_timeout() -> Option<i64> {
-    Some(
-        dotenvy::var("DEFAULT_TIMEOUT")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(7200),
-    )
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-struct Job {
-    #[serde(default)]
-    id: i64,
-    #[serde(default)]
-    created_at: NaiveDateTime,
-    acquired_lock_at: Option<NaiveDateTime>,
-    released_lock_at: Option<NaiveDateTime>,
-    #[serde(default = "default_timeout")]
-    timeout: Option<i64>,
-    #[serde(default)]
-    priority: i64,
-    job_name: Option<String>,
-    owner: String,
-    machine_id: i64,
 }
 
 struct AppError(pub StatusCode);
