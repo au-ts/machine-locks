@@ -22,7 +22,7 @@
 //! - Edit pool
 //! - Delete pool
 
-use std::time::Duration;
+use std::{env, time::Duration};
 
 use axum::{
     Json, Router,
@@ -234,56 +234,64 @@ async fn poll_job(
     Path((id,)): Path<(i64,)>,
 ) -> AppResult<Json<PollStatus>> {
     // TODO: always advance queue even if a job is not polled
-    let timeout_result = timeout(Duration::from_secs(30), async {
-        let job = query_as!(Job, "SELECT * FROM jobs WHERE id = ?", id)
-            .fetch_one(&state.db)
-            .await
-            .map_err(|_| AppError(StatusCode::NOT_FOUND))?;
+    let timeout_result = timeout(
+        Duration::from_secs(
+            env::var("SERVER_POLL_PERIOD")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(30),
+        ),
+        async {
+            let job = query_as!(Job, "SELECT * FROM jobs WHERE id = ?", id)
+                .fetch_one(&state.db)
+                .await
+                .map_err(|_| AppError(StatusCode::NOT_FOUND))?;
 
-        // Cancel job immediately if machines was marked as unavailable
-        if state
-            .validate_machine_available(job.machine_id)
-            .await
-            .is_err()
-        {
-            query!("DELETE FROM jobs WHERE id = ?", id)
-                .execute(&state.db)
-                .await?;
-            return Err(AppError(StatusCode::NOT_FOUND));
-        }
-
-        let mut receiver = state.get_or_create_sender(job.machine_id).subscribe();
-
-        loop {
-            state.release_expired_lock(job.machine_id).await?; // Idempotent
-            let next_job = state.query_next_job(job.machine_id).await?;
-            let current_job = state.query_current_job(job.machine_id).await?;
-
-            match (current_job, next_job) {
-                (Some(job), _) if job.id == id => {
-                    // Already acquired
-                    return Ok(Json(PollStatus::JobReady(job)));
-                }
-                (None, Some(job)) if job.id == id => {
-                    // Next job in line, acquire the machine
-                    let job = query_as!(
-                        Job,
-                        "UPDATE jobs SET
-                            acquired_lock_at = CURRENT_TIMESTAMP
-                            WHERE id = ? RETURNING *",
-                        id
-                    )
-                    .fetch_one(&state.db)
-                    .await?; // This operation is idempotent
-
-                    return Ok(Json(PollStatus::JobReady(job)));
-                }
-                _ => {} // Waiting
+            // Cancel job immediately if machines was marked as unavailable
+            if state
+                .validate_machine_available(job.machine_id)
+                .await
+                .is_err()
+            {
+                query!("DELETE FROM jobs WHERE id = ?", id)
+                    .execute(&state.db)
+                    .await?;
+                return Err(AppError(StatusCode::NOT_FOUND));
             }
 
-            receiver.recv().await?;
-        }
-    })
+            let mut receiver = state.get_or_create_sender(job.machine_id).subscribe();
+
+            loop {
+                state.release_expired_lock(job.machine_id).await?; // Idempotent
+                let next_job = state.query_next_job(job.machine_id).await?;
+                let current_job = state.query_current_job(job.machine_id).await?;
+
+                match (current_job, next_job) {
+                    (Some(job), _) if job.id == id => {
+                        // Already acquired
+                        return Ok(Json(PollStatus::JobReady(job)));
+                    }
+                    (None, Some(job)) if job.id == id => {
+                        // Next job in line, acquire the machine
+                        let job = query_as!(
+                            Job,
+                            "UPDATE jobs SET
+                            acquired_lock_at = CURRENT_TIMESTAMP
+                            WHERE id = ? RETURNING *",
+                            id
+                        )
+                        .fetch_one(&state.db)
+                        .await?; // This operation is idempotent
+
+                        return Ok(Json(PollStatus::JobReady(job)));
+                    }
+                    _ => {} // Waiting
+                }
+
+                receiver.recv().await?;
+            }
+        },
+    )
     .await;
 
     match timeout_result {

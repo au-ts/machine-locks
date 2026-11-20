@@ -12,7 +12,7 @@ use std::{
 use anyhow::Result;
 use axum::{http::StatusCode, response::IntoResponse};
 use common::Job;
-use log::{error, info};
+use log::{error, info, trace};
 use sqlx::{SqlitePool, migrate, query, query_as, sqlite::SqliteConnectOptions};
 use tokio::{net::TcpListener, sync::broadcast};
 
@@ -78,12 +78,17 @@ impl AppState {
                 WHERE released_lock_at IS NULL
                 AND machine_id = ?
                 AND acquired_lock_at IS NOT NULL
-                AND acquired_lock_at > datetime(acquired_lock_at, timeout || ' seconds')",
+                AND CURRENT_TIMESTAMP > datetime(acquired_lock_at, timeout || ' seconds')
+                RETURNING *",
             &machine_id
         )
-        .execute(&self.db)
+        .fetch_optional(&self.db)
         .await
-        .map(|_| ())
+        .map(|row| {
+            if let Some(row) = row {
+                trace!("Releasing expired lock {:?}", row);
+            }
+        })
         .map_err(Into::into)
     }
 
