@@ -78,17 +78,31 @@ impl AppState {
                 WHERE released_lock_at IS NULL
                 AND machine_id = ?
                 AND acquired_lock_at IS NOT NULL
-                AND CURRENT_TIMESTAMP > datetime(acquired_lock_at, timeout || ' seconds')
-                RETURNING *",
+                AND CURRENT_TIMESTAMP > datetime(acquired_lock_at, timeout || ' seconds')",
             &machine_id
         )
-        .fetch_optional(&self.db)
+        .execute(&self.db)
         .await
-        .map(|row| {
-            if let Some(row) = row {
-                trace!("Releasing expired lock {:?}", row);
-            }
-        })
+        .map(|_| ())
+        .map_err(Into::into)
+    }
+
+    /// Atomically advances the queue
+    async fn advance_queue(&self, machine_id: i64) -> AppResult<()> {
+        query!(
+            "UPDATE jobs SET
+            acquired_lock_at = CURRENT_TIMESTAMP
+            WHERE id = (
+                SELECT id from jobs
+                WHERE acquired_lock_at IS NULL AND machine_id = ?
+                ORDER BY priority DESC, created_at ASC
+                LIMIT 1
+            )",
+            &machine_id
+        )
+        .execute(&self.db)
+        .await
+        .map(|_| ())
         .map_err(Into::into)
     }
 

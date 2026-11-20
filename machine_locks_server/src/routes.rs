@@ -79,7 +79,8 @@ async fn get_machine_jobs(
     State(state): State<AppState>,
     Path((id,)): Path<(i64,)>,
 ) -> AppResult<impl IntoResponse> {
-    state.release_expired_lock(id).await?; // Idempotent
+    state.release_expired_lock(id).await?;
+    state.advance_queue(id).await?;
     Ok(Json(
         query_as!(
             Job,
@@ -262,30 +263,15 @@ async fn poll_job(
             let mut receiver = state.get_or_create_sender(job.machine_id).subscribe();
 
             loop {
-                state.release_expired_lock(job.machine_id).await?; // Idempotent
-                let next_job = state.query_next_job(job.machine_id).await?;
+                state.release_expired_lock(id).await?;
+                state.advance_queue(id).await?;
+
                 let current_job = state.query_current_job(job.machine_id).await?;
 
-                match (current_job, next_job) {
-                    (Some(job), _) if job.id == id => {
-                        // Already acquired
-                        return Ok(Json(PollStatus::JobReady(job)));
-                    }
-                    (None, Some(job)) if job.id == id => {
-                        // Next job in line, acquire the machine
-                        let job = query_as!(
-                            Job,
-                            "UPDATE jobs SET
-                            acquired_lock_at = CURRENT_TIMESTAMP
-                            WHERE id = ? RETURNING *",
-                            id
-                        )
-                        .fetch_one(&state.db)
-                        .await?; // This operation is idempotent
-
-                        return Ok(Json(PollStatus::JobReady(job)));
-                    }
-                    _ => {} // Waiting
+                if let Some(job) = current_job
+                    && job.id == id
+                {
+                    return Ok(Json(PollStatus::JobReady(job)));
                 }
 
                 receiver.recv().await?;
