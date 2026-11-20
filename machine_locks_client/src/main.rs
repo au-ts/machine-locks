@@ -148,6 +148,7 @@ impl ApiClient {
     pub fn get_machine_by_name(&self, machine: &str) -> Result<Machine> {
         self.get(&format!("machines/by-name/{}", machine))?
             .send()?
+            .error_for_status()?
             .json()
             .map_err(Into::into)
     }
@@ -157,6 +158,7 @@ impl ApiClient {
     pub fn get_machine_jobs(&self, machine_id: i64) -> Result<Vec<Job>> {
         self.get(&format!("machines/{}/jobs", machine_id))?
             .send()?
+            .error_for_status()?
             .json()
             .map_err(Into::into)
     }
@@ -188,7 +190,12 @@ impl ApiClient {
             None => {}
         }
 
-        let job_id = self.post("jobs")?.json(&payload).send()?.json::<Value>()?["id"]
+        let job_id = self
+            .post("jobs")?
+            .json(&payload)
+            .send()?
+            .error_for_status()?
+            .json::<Value>()?["id"]
             .as_number()
             .ok_or(anyhow!("Expected job ID to be a number"))?
             .as_i64()
@@ -200,7 +207,11 @@ impl ApiClient {
 
         for _ in iterator {
             // This uses HTTP long polling, so the server will hold open the connection
-            let status: PollStatus = self.get(&format!("jobs/{}/poll", job_id))?.send()?.json()?;
+            let status: PollStatus = self
+                .get(&format!("jobs/{}/poll", job_id))?
+                .send()?
+                .error_for_status()?
+                .json()?;
 
             info!("{:?}", status);
 
@@ -219,7 +230,8 @@ impl ApiClient {
             Some(active_job) if active_job.acquired_lock_at.is_some() => {
                 if force || active_job.owner == owner {
                     self.post(&format!("jobs/{}/release", active_job.id))?
-                        .send()?;
+                        .send()?
+                        .error_for_status()?;
                 } else {
                     bail!("Will not release job you do not own, use --force to force release.")
                 }
