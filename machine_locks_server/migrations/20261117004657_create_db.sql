@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     acquired_lock_at DATETIME, -- null until lock acquired
     released_lock_at DATETIME, -- null until lock released
-    timeout INTEGER, -- TODO: configurable default timeout
+    timeout INTEGER,
     priority INTEGER NOT NULL DEFAULT 0, -- task priority, larger is higher priority
     job_name TEXT, -- equivalent of MQ's `key` field.
     owner TEXT NOT NULL, -- POSIX user who owns the lock
