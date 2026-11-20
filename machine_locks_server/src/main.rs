@@ -12,7 +12,7 @@ use std::{
 use anyhow::Result;
 use axum::{http::StatusCode, response::IntoResponse};
 use common::Job;
-use log::{error, info, trace};
+use log::{error, info};
 use sqlx::{SqlitePool, migrate, query, query_as, sqlite::SqliteConnectOptions};
 use tokio::{net::TcpListener, sync::broadcast};
 
@@ -38,20 +38,6 @@ impl AppState {
                 sender
             }
         }
-    }
-
-    async fn query_next_job(&self, machine_id: i64) -> AppResult<Option<Job>> {
-        query_as!(
-            Job,
-            "SELECT * from jobs
-            WHERE acquired_lock_at IS NULL AND machine_id = ?
-            ORDER BY priority DESC, created_at ASC
-            LIMIT 1",
-            machine_id
-        )
-        .fetch_optional(&self.db)
-        .await
-        .map_err(Into::into)
     }
 
     async fn query_current_job(&self, machine_id: i64) -> AppResult<Option<Job>> {
