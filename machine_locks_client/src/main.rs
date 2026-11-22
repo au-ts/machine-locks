@@ -2,20 +2,21 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 
-use std::{env, path::PathBuf, thread::sleep, time::Duration};
+use std::{collections::HashMap, env, path::PathBuf, thread::sleep, time::Duration};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
+use chrono::NaiveDateTime;
 use clap::{Parser, Subcommand};
 use common::{
     Job, Machine,
     PollStatus::{self, JobReady},
 };
-use log::info;
+use log::{error, info, warn};
 use reqwest::{
     Url,
     blocking::{Client, RequestBuilder},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tabled::{
     Table,
@@ -98,14 +99,12 @@ enum SemCommands {
 #[derive(Subcommand)]
 enum MachineCommands {
     /// List all machines
-    List,
-    /// Import machines from a TSV file
-    ImportTsv {
-        file: PathBuf,
+    List {
         #[arg(long)]
-        /// Whether to overwrite existing machines that are also in the TSV file
-        overwrite: bool,
+        json: bool,
     },
+    /// Import machines from a TSV file, skipping already existing machines
+    ImportTsv { file: PathBuf },
     /// Add a new machine
     Add,
     /// Remove a machine
@@ -145,6 +144,10 @@ impl ApiClient {
         Ok(self.client.post(self.base_url.join(endpoint)?))
     }
 
+    pub fn delete(&self, endpoint: &str) -> Result<RequestBuilder> {
+        Ok(self.client.delete(self.base_url.join(endpoint)?))
+    }
+
     pub fn get_machine_by_name(&self, machine: &str) -> Result<Machine> {
         self.get(&format!("machines/by-name/{}", machine))?
             .send()?
@@ -163,7 +166,7 @@ impl ApiClient {
             .map_err(Into::into)
     }
 
-    fn acquire(
+    pub fn acquire(
         &self,
         machine_id: i64,
         owner: &str,
@@ -223,7 +226,7 @@ impl ApiClient {
         bail!("Failed to acquire lock within specified retries");
     }
 
-    fn release(&self, machine_id: i64, owner: &str, force: bool) -> Result<()> {
+    pub fn release(&self, machine_id: i64, owner: &str, force: bool) -> Result<()> {
         let jobs = self.get_machine_jobs(machine_id)?;
 
         match jobs.first() {
@@ -241,6 +244,31 @@ impl ApiClient {
 
         Ok(())
     }
+
+    pub fn get_machines(&self) -> Result<Vec<Machine>> {
+        self.get("machines")?
+            .send()?
+            .error_for_status()?
+            .json()
+            .map_err(Into::into)
+    }
+
+    pub fn create_machine(&self, machine: Machine) -> Result<()> {
+        self.post("machines")?
+            .json(&machine)
+            .send()?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
+    pub fn remove_machine(&self, machine_id: i64) -> Result<()> {
+        self.delete(&format!("machines/{}", machine_id))?
+            .send()?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(Into::into)
+    }
 }
 
 pub fn dump_json<T>(value: &T) -> Result<(), serde_json::Error>
@@ -255,9 +283,60 @@ where
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let client = ApiClient::new()?;
+    env_logger::init();
 
-    // TODO: human readable format
     match cli.command {
+        Commands::Machines {
+            command: MachineCommands::List { json },
+        } => {
+            let machines = client.get_machines()?;
+            if json {
+                dump_json(&machines)?;
+            } else {
+                let mut table = Table::new(&machines);
+                println!("{}", table.with(Style::modern()))
+            }
+        }
+        Commands::Machines {
+            command: MachineCommands::ImportTsv { file },
+        } => {
+            info!("file {:?}", file);
+            let machines = client
+                .get_machines()
+                .with_context(|| "Failed to get machines")?;
+
+            let machines: HashMap<&str, Machine> = machines
+                .iter()
+                .map(|machine| (machine.name.as_str(), machine.clone()))
+                .collect();
+
+            let mut csv_reader = csv::ReaderBuilder::new()
+                .delimiter(b'\t')
+                .comment(Some(b'#'))
+                .from_reader(std::fs::File::open(file)?);
+
+            for result in csv_reader.deserialize::<MachineRow>() {
+                match result {
+                    Ok(machine) if !machines.contains_key(machine.name.as_str()) => {
+                        if let Err(e) = client.create_machine(machine.into()) {
+                            error!("Failed to create machine: {:?}", e);
+                        }
+                    }
+                    Ok(machine) => {
+                        warn!("Already found machine with name {}", machine.name);
+                    }
+                    Err(e) => {
+                        error!("Failed to decode row, {:?}", e);
+                    }
+                }
+            }
+        }
+        Commands::Machines {
+            command: MachineCommands::Remove { machine },
+        } => {
+            let machine = client.get_machine_by_name(&machine)?;
+            client.remove_machine(machine.id)?;
+        }
         Commands::Sem {
             command:
                 SemCommands::Info {
@@ -336,4 +415,107 @@ fn jobs_table(machine: &str, jobs: Vec<Job>) {
     }
 
     println!("{}", table);
+}
+
+#[derive(Debug, Clone, Deserialize)]
+/// Table row in TSV import
+pub struct MachineRow {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub created_at: NaiveDateTime,
+    pub name: String,
+    pub poweroff_name: Option<String>,
+    pub arch: Option<String>,
+    pub sel4_plat: Option<String>,
+    pub isa: Option<String>,
+    pub soc: Option<String>,
+    pub cpu: Option<String>,
+    pub cores: Option<String>,
+    pub ram: Option<String>,
+    pub max_clk: Option<String>,
+    pub num_files: Option<i64>,
+    pub linux_num_files: Option<i64>,
+    pub pxe_linux: Option<String>,
+    pub dtb: Option<String>,
+}
+
+fn parse_bool(s: Option<&str>) -> bool {
+    s.map(|s| {
+        let s = s.to_lowercase();
+        let s = s.trim();
+        s == "true" || s == "yes"
+    })
+    .unwrap_or_default()
+}
+
+impl From<MachineRow> for Machine {
+    fn from(
+        MachineRow {
+            id,
+            created_at,
+            name,
+            poweroff_name,
+            arch,
+            sel4_plat,
+            isa,
+            soc,
+            cpu,
+            cores,
+            ram,
+            max_clk,
+            num_files,
+            linux_num_files,
+            pxe_linux,
+            dtb,
+        }: MachineRow,
+    ) -> Self {
+        Machine {
+            id,
+            created_at,
+            available: true,
+            name,
+            poweroff_name,
+            arch,
+            sel4_plat,
+            isa,
+            soc,
+            cpu,
+            cores,
+            ram: ram.and_then(|ram| {
+                let ram = ram.trim().to_lowercase();
+                if let Some(ram) = ram.strip_suffix("tb") {
+                    return ram.parse().ok().map(|r: i64| r * 1024 * 1024);
+                }
+                if let Some(ram) = ram.strip_suffix("gb") {
+                    return ram.parse().ok().map(|r: i64| r * 1024);
+                }
+
+                if let Some(ram) = ram.strip_suffix("mb") {
+                    return ram.parse().ok();
+                }
+
+                None
+            }),
+            max_clk: max_clk.and_then(|max_clk| {
+                let max_clk = max_clk.trim().to_lowercase();
+                if let Some(max_clk) = max_clk.strip_suffix("thz") {
+                    return max_clk.parse().ok().map(|r: f64| r * 1000.);
+                }
+                if let Some(max_clk) = max_clk.strip_suffix("ghz") {
+                    return max_clk.parse().ok();
+                }
+
+                if let Some(max_clk) = max_clk.strip_suffix("mhz") {
+                    return max_clk.parse().ok().map(|r: f64| r / 1000.);
+                }
+
+                None
+            }),
+            num_files,
+            linux_num_files,
+            pxe_linux: parse_bool(pxe_linux.as_deref()),
+            dtb: parse_bool(dtb.as_deref()),
+        }
+    }
 }

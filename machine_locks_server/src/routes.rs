@@ -115,6 +115,7 @@ async fn create_machine(
 ) -> AppResult<impl IntoResponse> {
     let machine = query!(
         "INSERT INTO machines (
+            available,
             name,
             poweroff_name,
             arch,
@@ -130,8 +131,9 @@ async fn create_machine(
             pxe_linux,
             dtb
         ) VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id",
+        machine.available,
         machine.name,
         machine.poweroff_name,
         machine.arch,

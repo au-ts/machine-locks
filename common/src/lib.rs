@@ -5,41 +5,45 @@ use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 use tabled::derive::display;
 
+const fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Tabled)]
 pub struct Machine {
     #[serde(default)]
     pub id: i64,
     #[serde(default)]
     pub created_at: NaiveDateTime,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub available: bool,
-    pub name: String,
+    pub name: String, //
     #[tabled(display("display::option", "-"))]
-    pub poweroff_name: Option<String>,
+    pub poweroff_name: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub arch: Option<String>,
+    pub arch: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub sel4_plat: Option<String>,
+    pub sel4_plat: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub isa: Option<String>,
+    pub isa: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub soc: Option<String>,
+    pub soc: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub cpu: Option<String>,
+    pub cpu: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub cores: Option<String>,
+    pub cores: Option<String>, //
     #[tabled(display("display::option", "-"))]
-    pub ram: Option<i64>,
+    pub ram: Option<i64>, // conversion needed
     #[tabled(display("display::option", "-"))]
-    pub max_clk: Option<f64>,
+    pub max_clk: Option<f64>, // conversion needed
     #[tabled(display("display::option", "-"))]
-    pub num_files: Option<i64>,
+    pub num_files: Option<i64>, //
     #[tabled(display("display::option", "-"))]
-    pub linux_num_files: Option<i64>,
+    pub linux_num_files: Option<i64>, //
     #[serde(default)]
-    pub pxe_linux: bool,
+    pub pxe_linux: bool, // cn
     #[serde(default)]
-    pub dtb: bool,
+    pub dtb: bool, // cn
 }
 
 pub fn default_timeout() -> Option<i64> {

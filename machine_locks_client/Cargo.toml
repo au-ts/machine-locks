@@ -13,3 +13,5 @@ serde = { version = "1.0.229", features = ["derive"] }
 env_logger = "0.11.11"
 log = "0.4.35"
 tabled = "0.22.0"
+csv = "1.4.0"
+chrono = { version = "0.4.45", features = ["serde"] }
