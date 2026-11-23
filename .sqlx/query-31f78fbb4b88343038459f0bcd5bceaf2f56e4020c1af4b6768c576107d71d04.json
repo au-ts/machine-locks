@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs SET\n                released_lock_at = CURRENT_TIMESTAMP\n                WHERE released_lock_at IS NULL\n                AND machine_id = ?\n                AND acquired_lock_at IS NOT NULL\n                AND CURRENT_TIMESTAMP > datetime(acquired_lock_at, timeout || ' seconds')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "31f78fbb4b88343038459f0bcd5bceaf2f56e4020c1af4b6768c576107d71d04"
+}

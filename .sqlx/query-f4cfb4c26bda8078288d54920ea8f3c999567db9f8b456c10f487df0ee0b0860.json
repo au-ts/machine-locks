@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * from jobs\n            WHERE acquired_lock_at IS NULL AND machine_id = ?\n            ORDER BY priority DESC, created_at ASC\n            LIMIT 1",
+  "query": "\n        SELECT * FROM jobs\n        WHERE machine_id = ? AND released_lock_at IS NULL\n        ORDER BY priority DESC, created_at ASC\n    ",
   "describe": {
     "columns": [
       {
@@ -118,5 +118,5 @@
       false
     ]
   },
-  "hash": "3b80969950564b0e74be2369826d37cc6ca6c74dea75c232ea8bda490c131057"
+  "hash": "f4cfb4c26bda8078288d54920ea8f3c999567db9f8b456c10f487df0ee0b0860"
 }

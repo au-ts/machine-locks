@@ -1,5 +1,5 @@
 [package]
-name = "machine_locks_client"
+name = "machine-locks-client"
 version = "0.1.0"
 edition = "2024"
 

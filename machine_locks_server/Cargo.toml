@@ -1,5 +1,5 @@
 [package]
-name = "machine_locks_server"
+name = "machine-locks-server"
 version = "0.1.0"
 edition = "2024"
 

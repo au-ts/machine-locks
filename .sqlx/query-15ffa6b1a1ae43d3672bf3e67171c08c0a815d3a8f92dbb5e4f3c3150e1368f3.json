@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO machines (\n            available,\n            name,\n            poweroff_name,\n            arch,\n            sel4_plat,\n            isa,\n            soc,\n            cpu,\n            cores,\n            ram,\n            max_clk,\n            num_files,\n            linux_num_files,\n            pxe_linux,\n            dtb\n        ) VALUES\n        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n        RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 15
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "15ffa6b1a1ae43d3672bf3e67171c08c0a815d3a8f92dbb5e4f3c3150e1368f3"
+}

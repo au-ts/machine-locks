@@ -21,16 +21,39 @@
 
     packages = builtins.mapAttrs (system: pkgs: {
       server = pkgs.rustPlatform.buildRustPackage {
-        pname = "machine_locks_server";
+        pname = "machine-locks-server";
         src = ./.;
         version = "0.1.0";
         nativeBuildInputs = [
           pkgs.pkg-config
         ];
-        buildInputs = [ pkgs.sqlite ];
+        buildInputs = [
+          pkgs.aws-lc
+          pkgs.sqlite
+        ];
         cargoFlags = [
           "-p"
           "machine_locks_server"
+        ];
+        cargoLock = {
+          lockFile = ./Cargo.lock;
+        };
+      };
+
+      client = pkgs.rustPlatform.buildRustPackage {
+        pname = "machine-locks-client";
+        src = ./.;
+        version = "0.1.0";
+        cargoFlags = [
+          "-p"
+          "machine_locks_client"
+        ];
+        nativeBuildInputs = [
+          pkgs.pkg-config
+        ];
+        buildInputs = [
+          pkgs.aws-lc
+          pkgs.sqlite
         ];
         cargoLock = {
           lockFile = ./Cargo.lock;
