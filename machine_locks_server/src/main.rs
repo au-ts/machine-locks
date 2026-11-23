@@ -53,10 +53,8 @@ impl AppState {
         .map_err(Into::into)
     }
 
-    /// # TOCTOU safety
-    /// This method releases expired locks in a single SQLite operation. This
-    /// is important as this operation must be atomic -- to avoid a TOCTOU
-    /// bug (lock expires, queue gets advanced twice so a job is missed).
+    /// Releases any expired lock. This is idempotent: it is safe to call it
+    /// arbitrarily many times.
     async fn release_expired_lock(&self, machine_id: i64) -> AppResult<()> {
         query!(
             "UPDATE jobs SET
