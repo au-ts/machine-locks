@@ -79,5 +79,6 @@ pub struct Job {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum PollStatus {
     JobReady(Job),
+    JobTimedOut(Job),
     Waiting,
 }

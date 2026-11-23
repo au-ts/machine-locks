@@ -218,8 +218,12 @@ impl ApiClient {
 
             info!("{:?}", status);
 
-            if let JobReady(job) = status {
-                return Ok(job);
+            match status {
+                JobReady(job) => return Ok(job),
+                PollStatus::JobTimedOut(job) => {
+                    return Err(anyhow!("Job timed out {:?}", job));
+                }
+                PollStatus::Waiting => {}
             }
         }
 

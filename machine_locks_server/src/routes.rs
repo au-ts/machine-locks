@@ -265,8 +265,8 @@ async fn poll_job(
             let mut receiver = state.get_or_create_sender(job.machine_id).subscribe();
 
             loop {
-                state.release_expired_lock(id).await?;
-                state.advance_queue(id).await?;
+                state.release_expired_lock(job.machine_id).await?;
+                state.advance_queue(job.machine_id).await?;
 
                 let current_job = state.query_current_job(job.machine_id).await?;
 
@@ -274,6 +274,15 @@ async fn poll_job(
                     && job.id == id
                 {
                     return Ok(Json(PollStatus::JobReady(job)));
+                }
+
+                let job = query_as!(Job, "SELECT * FROM jobs WHERE id = ?", id)
+                    .fetch_one(&state.db)
+                    .await
+                    .map_err(|_| AppError(StatusCode::NOT_FOUND))?;
+
+                if job.released_lock_at.is_some() {
+                    return Ok(Json(PollStatus::JobTimedOut(job)));
                 }
 
                 receiver.recv().await?;
