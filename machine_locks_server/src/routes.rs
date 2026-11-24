@@ -41,6 +41,7 @@ use common::{Job, Machine, PollStatus};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/machines", get(get_machines).post(create_machine))
+        .route("/machines/locked", get(get_locked_machines))
         .route("/machines/by-name/{name}", get(get_machine_by_name))
         .route("/machines/{machine_id}", delete(delete_machine))
         .route("/machines/{machine_id}/jobs", get(get_machine_jobs))
@@ -102,6 +103,23 @@ async fn get_machines(State(state): State<AppState>) -> AppResult<impl IntoRespo
             Machine,
             "
         SELECT * FROM machines
+    "
+        )
+        .fetch_all(&state.db)
+        .await?,
+    ))
+}
+
+async fn get_locked_machines(State(state): State<AppState>) -> AppResult<impl IntoResponse> {
+    Ok(Json(
+        query_as!(
+            Machine,
+            "
+        SELECT m.* FROM machines m
+        JOIN jobs j ON m.id = j.machine_id
+        WHERE j.released_lock_at IS NULL
+            AND acquired_lock_at IS NOT NULL
+        GROUP BY m.id
     "
         )
         .fetch_all(&state.db)

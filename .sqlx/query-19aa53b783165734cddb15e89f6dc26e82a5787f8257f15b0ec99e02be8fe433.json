@@ -1,0 +1,218 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT m.* FROM machines m\n        JOIN jobs j ON m.id = j.machine_id\n        WHERE j.released_lock_at IS NULL\n            AND acquired_lock_at IS NOT NULL\n        GROUP BY m.id\n    ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 1,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "available",
+        "ordinal": 2,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "available"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "poweroff_name",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "poweroff_name"
+          }
+        }
+      },
+      {
+        "name": "arch",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "arch"
+          }
+        }
+      },
+      {
+        "name": "sel4_plat",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "sel4_plat"
+          }
+        }
+      },
+      {
+        "name": "isa",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "isa"
+          }
+        }
+      },
+      {
+        "name": "soc",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "soc"
+          }
+        }
+      },
+      {
+        "name": "cpu",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "cpu"
+          }
+        }
+      },
+      {
+        "name": "cores",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "cores"
+          }
+        }
+      },
+      {
+        "name": "ram",
+        "ordinal": 11,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "ram"
+          }
+        }
+      },
+      {
+        "name": "max_clk",
+        "ordinal": 12,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "max_clk"
+          }
+        }
+      },
+      {
+        "name": "num_files",
+        "ordinal": 13,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "num_files"
+          }
+        }
+      },
+      {
+        "name": "linux_num_files",
+        "ordinal": 14,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "linux_num_files"
+          }
+        }
+      },
+      {
+        "name": "pxe_linux",
+        "ordinal": 15,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "pxe_linux"
+          }
+        }
+      },
+      {
+        "name": "dtb",
+        "ordinal": 16,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "machines",
+            "name": "dtb"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "19aa53b783165734cddb15e89f6dc26e82a5787f8257f15b0ec99e02be8fe433"
+}

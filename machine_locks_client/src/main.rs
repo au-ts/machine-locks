@@ -105,6 +105,11 @@ enum MachineCommands {
         #[arg(long)]
         json: bool,
     },
+    /// List all locked machines
+    ListLocked {
+        #[arg(long)]
+        json: bool,
+    },
     /// Import machines from a TSV file, skipping already existing machines
     ImportTsv { file: PathBuf },
     /// Add a new machine
@@ -260,6 +265,14 @@ impl ApiClient {
             .map_err(Into::into)
     }
 
+    pub fn get_locked_machines(&self) -> Result<Vec<Machine>> {
+        self.get("machines/locked")?
+            .send()?
+            .error_for_status()?
+            .json()
+            .map_err(Into::into)
+    }
+
     pub fn create_machine(&self, machine: Machine) -> Result<()> {
         self.post("machines")?
             .json(&machine)
@@ -295,6 +308,11 @@ where
     Ok(())
 }
 
+pub fn machines_table(machines: &Vec<Machine>) {
+    let mut table = Table::new(machines);
+    println!("{}", table.with(Style::modern()))
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let client = ApiClient::new()?;
@@ -302,14 +320,23 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Machines {
+            command: MachineCommands::ListLocked { json },
+        } => {
+            let machines = client.get_locked_machines()?;
+            if json {
+                dump_json(&machines)?;
+            } else {
+                machines_table(&machines);
+            }
+        }
+        Commands::Machines {
             command: MachineCommands::List { json },
         } => {
             let machines = client.get_machines()?;
             if json {
                 dump_json(&machines)?;
             } else {
-                let mut table = Table::new(&machines);
-                println!("{}", table.with(Style::modern()))
+                machines_table(&machines);
             }
         }
         Commands::Machines {
