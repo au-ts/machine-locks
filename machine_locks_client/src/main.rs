@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 
-use std::{collections::HashMap, env, path::PathBuf, thread::sleep, time::Duration};
+use std::{collections::HashMap, env, path::PathBuf, process::exit, thread::sleep, time::Duration};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::NaiveDateTime;
@@ -123,6 +123,7 @@ enum MachineCommands {
     },
 }
 
+#[derive(Debug, Clone)]
 pub struct ApiClient {
     pub client: Client,
     pub base_url: Url,
@@ -211,30 +212,46 @@ impl ApiClient {
             .as_i64()
             .ok_or(anyhow!("Expected job ID to fit in i64"))?;
 
-        let iterator: Box<dyn Iterator<Item = u32>> = num_retries
-            .map(|n| Box::new((0..n).into_iter()) as Box<dyn Iterator<Item = u32>>)
-            .unwrap_or(Box::new(std::iter::repeat(0)));
+        let self_clone = self.clone();
+        if let Err(e) = ctrlc::set_handler(move || {
+            self_clone.cancel(job_id).expect("Error cancelling job");
+            exit(1);
+        }) {
+            error!("Could not set up ctrl+c handler. {:?}", e);
+        };
 
-        for _ in iterator {
-            // This uses HTTP long polling, so the server will hold open the connection
-            let status: PollStatus = self
-                .get(&format!("jobs/{}/poll", job_id))?
-                .send()?
-                .error_for_status()?
-                .json()?;
+        let result = 'outer: {
+            let iterator: Box<dyn Iterator<Item = u32>> = num_retries
+                .map(|n| Box::new((0..n).into_iter()) as Box<dyn Iterator<Item = u32>>)
+                .unwrap_or(Box::new(std::iter::repeat(0)));
 
-            info!("{:?}", status);
+            for _ in iterator {
+                // This uses HTTP long polling, so the server will hold open the connection
+                let status: PollStatus = self
+                    .get(&format!("jobs/{}/poll", job_id))?
+                    .send()?
+                    .error_for_status()?
+                    .json()?;
 
-            match status {
-                JobReady(job) => return Ok(job),
-                PollStatus::JobTimedOut(job) => {
-                    return Err(anyhow!("Job timed out {:?}", job));
+                info!("{:?}", status);
+
+                match status {
+                    JobReady(job) => break 'outer Ok(job),
+                    PollStatus::JobTimedOut(job) => {
+                        break 'outer Err(anyhow!("Job timed out {:?}", job));
+                    }
+                    PollStatus::Waiting => {}
                 }
-                PollStatus::Waiting => {}
             }
-        }
+            break 'outer Err(anyhow!("Failed to acquire lock within specified retries"));
+        };
 
-        bail!("Failed to acquire lock within specified retries");
+        if let Err(_) = result {
+            self.cancel(job_id)
+                .context("Failed to cancel job of failed acquisition")?;
+        };
+
+        result
     }
 
     pub fn release(&self, machine_id: i64, owner: &str, force: bool) -> Result<()> {
