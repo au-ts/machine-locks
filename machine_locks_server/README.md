@@ -1,4 +1,4 @@
-# machine_locks_server
+# machine-locks-server
 
 `cargo sqlx prepare --workspace` should be run after any changes to the queries
 to have `sqlx` generate query metadata to use in building the project.

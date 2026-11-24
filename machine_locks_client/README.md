@@ -1,4 +1,4 @@
-# machine_locks_server
+# machine-locks-client
 
 ## Installation
 

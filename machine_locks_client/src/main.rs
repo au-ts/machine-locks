@@ -236,6 +236,7 @@ impl ApiClient {
         match jobs.first() {
             Some(active_job) if active_job.acquired_lock_at.is_some() => {
                 if force || active_job.owner == owner {
+                    // This is not a race: the specific job ID is specified and releasing is idempotent
                     self.post(&format!("jobs/{}/release", active_job.id))?
                         .send()?
                         .error_for_status()?;
