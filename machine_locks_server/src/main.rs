@@ -108,7 +108,7 @@ impl AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenvy::dotenv()?; // Load additional env vars from a .env file
+    let _ = dotenvy::dotenv(); // Load additional env vars from a .env file
     env_logger::init();
 
     // Initialise db
