@@ -94,6 +94,8 @@ enum SemCommands {
         /// Release the lock, even if you do not currently own it
         force: bool,
     },
+    /// Cancel a job before it executes
+    Cancel { id: i64 },
 }
 
 #[derive(Subcommand)]
@@ -274,6 +276,14 @@ impl ApiClient {
             .map(|_| ())
             .map_err(Into::into)
     }
+
+    fn cancel(&self, id: i64) -> Result<()> {
+        self.delete(&format!("jobs/{}", id))?
+            .send()?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(Into::into)
+    }
 }
 
 pub fn dump_json<T>(value: &T) -> Result<(), serde_json::Error>
@@ -401,6 +411,11 @@ fn main() -> Result<()> {
         } => {
             let machine = client.get_machine_by_name(&machine)?;
             client.release(machine.id, &owner, force)?;
+        }
+        Commands::Sem {
+            command: SemCommands::Cancel { id },
+        } => {
+            client.cancel(id)?;
         }
         _ => todo!(),
     }

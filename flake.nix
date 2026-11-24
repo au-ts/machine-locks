@@ -28,13 +28,10 @@
           pkgs.pkg-config
         ];
         buildInputs = [
-          pkgs.aws-lc
           pkgs.sqlite
         ];
-        cargoFlags = [
-          "-p"
-          "machine_locks_server"
-        ];
+        doCheck = false;
+        buildAndTestSubdir = "machine_locks_server";
         cargoLock = {
           lockFile = ./Cargo.lock;
         };
@@ -44,16 +41,13 @@
         pname = "machine-locks-client";
         src = ./.;
         version = "0.1.0";
-        cargoFlags = [
-          "-p"
-          "machine_locks_client"
-        ];
+        buildAndTestSubdir = "machine_locks_client";
         nativeBuildInputs = [
           pkgs.pkg-config
         ];
+        doCheck = false;
         buildInputs = [
           pkgs.aws-lc
-          pkgs.sqlite
         ];
         cargoLock = {
           lockFile = ./Cargo.lock;

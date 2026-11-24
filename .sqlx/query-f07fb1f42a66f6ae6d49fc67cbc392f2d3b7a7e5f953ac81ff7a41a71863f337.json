@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM jobs WHERE id = ?\n        AND acquired_lock_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "f07fb1f42a66f6ae6d49fc67cbc392f2d3b7a7e5f953ac81ff7a41a71863f337"
+}

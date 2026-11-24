@@ -206,9 +206,13 @@ async fn cancel_job(
     State(state): State<AppState>,
     Path((id,)): Path<(i64,)>,
 ) -> AppResult<impl IntoResponse> {
-    query!("DELETE FROM jobs WHERE id = ?", id)
-        .execute(&state.db)
-        .await?;
+    query!(
+        "DELETE FROM jobs WHERE id = ?
+        AND acquired_lock_at IS NULL",
+        id
+    )
+    .execute(&state.db)
+    .await?;
     Ok(())
 }
 

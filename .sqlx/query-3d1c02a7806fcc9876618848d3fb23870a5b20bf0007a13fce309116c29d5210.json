@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs SET\n            acquired_lock_at = CURRENT_TIMESTAMP\n            WHERE id = ( -- next row to acquire\n                SELECT id from jobs\n                WHERE acquired_lock_at IS NULL AND machine_id = ?1\n                ORDER BY priority DESC, created_at ASC\n                LIMIT 1\n            ) AND NOT EXISTS ( -- no job currently holds lock\n                SELECT 1 FROM jobs\n                WHERE released_lock_at IS NULL AND machine_id = ?1\n                AND acquired_lock_at IS NOT NULL\n            )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3d1c02a7806fcc9876618848d3fb23870a5b20bf0007a13fce309116c29d5210"
+}

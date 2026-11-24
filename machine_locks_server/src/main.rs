@@ -76,11 +76,15 @@ impl AppState {
         query!(
             "UPDATE jobs SET
             acquired_lock_at = CURRENT_TIMESTAMP
-            WHERE id = (
+            WHERE id = ( -- next row to acquire
                 SELECT id from jobs
-                WHERE acquired_lock_at IS NULL AND machine_id = ?
+                WHERE acquired_lock_at IS NULL AND machine_id = ?1
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
+            ) AND NOT EXISTS ( -- no job currently holds lock
+                SELECT 1 FROM jobs
+                WHERE released_lock_at IS NULL AND machine_id = ?1
+                AND acquired_lock_at IS NOT NULL
             )",
             &machine_id
         )
