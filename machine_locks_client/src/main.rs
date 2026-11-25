@@ -214,7 +214,9 @@ impl ApiClient {
 
         let self_clone = self.clone();
         if let Err(e) = ctrlc::set_handler(move || {
-            self_clone.cancel(job_id).expect("Error cancelling job");
+            if let Err(e) = self_clone.cancel(job_id) {
+                error!("Failed to cancel job {:?}", e);
+            }
             exit(1);
         }) {
             error!("Could not set up ctrl+c handler. {:?}", e);
