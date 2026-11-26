@@ -15,6 +15,8 @@
           clippy
           rust-analyzer
           sqlx-cli
+          openssl
+          pkg-config
         ];
       };
     }) inputs.nixpkgs.legacyPackages;

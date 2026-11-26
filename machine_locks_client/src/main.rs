@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 UNSW
 //
 // SPDX-License-Identifier: BSD-2-Clause
+mod auth;
 
 use std::{collections::HashMap, env, path::PathBuf, process::exit, thread::sleep, time::Duration};
 
@@ -12,7 +13,7 @@ use common::{
     PollStatus::{self, JobReady},
 };
 use log::{error, info, warn};
-use reqwest::{
+use openidconnect::reqwest::{
     Url,
     blocking::{Client, RequestBuilder},
 };
@@ -22,6 +23,8 @@ use tabled::{
     Table,
     settings::{Color, Style, object::Rows},
 };
+
+use crate::auth::auth_commands;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -43,12 +46,22 @@ enum Commands {
         #[command(subcommand)]
         command: MachineCommands,
     },
+    /// Manage authentication
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum AuthCommands {
+    Status,
+    Login,
+    Logout,
 }
 
 #[derive(Subcommand)]
 enum SemCommands {
-    /// Print all currently locked systems
-    Dumpall,
     /// Get information about a particular machine
     Info {
         /// The machine name
@@ -332,15 +345,17 @@ pub fn machines_table(machines: &Vec<Machine>) {
     println!("{}", table.with(Style::modern()))
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let client = ApiClient::new()?;
-    env_logger::init();
+fn machine_comannd(client: &ApiClient, command: MachineCommands) -> Result<()> {
+    match command {
+        MachineCommands::Set {
+            machine: _,
+            key: _,
+            value: _,
+        } => todo!(),
 
-    match cli.command {
-        Commands::Machines {
-            command: MachineCommands::ListLocked { json },
-        } => {
+        MachineCommands::Add => todo!(),
+
+        MachineCommands::ListLocked { json } => {
             let machines = client.get_locked_machines()?;
             if json {
                 dump_json(&machines)?;
@@ -348,9 +363,8 @@ fn main() -> Result<()> {
                 machines_table(&machines);
             }
         }
-        Commands::Machines {
-            command: MachineCommands::List { json },
-        } => {
+
+        MachineCommands::List { json } => {
             let machines = client.get_machines()?;
             if json {
                 dump_json(&machines)?;
@@ -358,9 +372,8 @@ fn main() -> Result<()> {
                 machines_table(&machines);
             }
         }
-        Commands::Machines {
-            command: MachineCommands::ImportTsv { file },
-        } => {
+
+        MachineCommands::ImportTsv { file } => {
             info!("file {:?}", file);
             let machines = client
                 .get_machines()
@@ -392,19 +405,21 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Machines {
-            command: MachineCommands::Remove { machine },
-        } => {
+
+        MachineCommands::Remove { machine } => {
             let machine = client.get_machine_by_name(&machine)?;
             client.remove_machine(machine.id)?;
         }
-        Commands::Sem {
-            command:
-                SemCommands::Info {
-                    machine,
-                    json,
-                    poll,
-                },
+    }
+    Ok(())
+}
+
+fn sem_commands(client: &ApiClient, command: SemCommands) -> Result<()> {
+    match command {
+        SemCommands::Info {
+            machine,
+            json,
+            poll,
         } => {
             let machine = client.get_machine_by_name(&machine)?;
             if json {
@@ -423,17 +438,15 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Sem {
-            command:
-                SemCommands::Acquire {
-                    machine,
-                    owner,
-                    job_name,
-                    priority,
-                    no_timeout,
-                    timeout,
-                    num_retries,
-                },
+
+        SemCommands::Acquire {
+            machine,
+            owner,
+            job_name,
+            priority,
+            no_timeout,
+            timeout,
+            num_retries,
         } => {
             let machine = client.get_machine_by_name(&machine)?;
             let job = client.acquire(
@@ -447,23 +460,32 @@ fn main() -> Result<()> {
             )?;
             dump_json(&job)?;
         }
-        Commands::Sem {
-            command:
-                SemCommands::Release {
-                    machine,
-                    owner,
-                    force,
-                },
+
+        SemCommands::Release {
+            machine,
+            owner,
+            force,
         } => {
             let machine = client.get_machine_by_name(&machine)?;
             client.release(machine.id, &owner, force)?;
         }
-        Commands::Sem {
-            command: SemCommands::Cancel { id },
-        } => {
+        SemCommands::Cancel { id } => {
             client.cancel(id)?;
         }
-        _ => todo!(),
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let client = ApiClient::new()?;
+    env_logger::init();
+
+    match cli.command {
+        Commands::Machines { command } => machine_comannd(&client, command)?,
+        Commands::Sem { command } => sem_commands(&client, command)?,
+        Commands::Auth { command } => auth_commands(command)?,
     }
 
     Ok(())
