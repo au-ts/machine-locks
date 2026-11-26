@@ -2,12 +2,17 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use log::info;
+use openidconnect::AccessToken;
 use openidconnect::AccessTokenHash;
+use openidconnect::EndpointMaybeSet;
+use openidconnect::EndpointNotSet;
+use openidconnect::EndpointSet;
 use openidconnect::NonceVerifier;
 use openidconnect::OAuth2TokenResponse;
 use openidconnect::RefreshToken;
 use openidconnect::core::CoreIdToken;
 use openidconnect::core::CoreIdTokenClaims;
+use openidconnect::core::CoreTokenResponse;
 use openidconnect::{
     AdditionalProviderMetadata, AuthType, ClientId, DeviceAuthorizationUrl, IssuerUrl,
     ProviderMetadata,
@@ -26,7 +31,7 @@ use std::str::FromStr;
 use crate::AuthCommands;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct DeviceEndpointProviderMetadata {
+pub struct DeviceEndpointProviderMetadata {
     device_authorization_endpoint: DeviceAuthorizationUrl,
 }
 impl AdditionalProviderMetadata for DeviceEndpointProviderMetadata {}
@@ -54,6 +59,7 @@ impl NonceVerifier for DummyNonce {
     }
 }
 
+#[allow(dead_code)]
 pub trait TokenStore {
     fn set_access_token(&self, token: &str) -> Result<()>;
     fn set_refresh_token(&self, token: &str) -> Result<()>;
@@ -62,6 +68,113 @@ pub trait TokenStore {
     fn get_refresh_token(&self) -> Result<String>;
     fn get_id_token(&self) -> Result<String>;
     fn logout(&self) -> Result<()>;
+}
+
+pub type DiscoveredClient = CoreClient<
+    EndpointSet,
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
+>;
+
+pub struct AuthState {
+    store: Box<dyn TokenStore>,
+    client: DiscoveredClient,
+    http_client: reqwest::blocking::Client,
+}
+
+impl AuthState {
+    pub fn new(
+        store: impl TokenStore + 'static,
+        provider_metadata: DeviceProviderMetadata,
+        client_id: ClientId,
+    ) -> Result<Self> {
+        let device_endpoint = provider_metadata
+            .additional_metadata()
+            .device_authorization_endpoint
+            .clone();
+
+        Ok(Self {
+            store: Box::new(store),
+            client: CoreClient::from_provider_metadata(provider_metadata, client_id, None)
+                .set_device_authorization_url(device_endpoint)
+                .set_auth_type(AuthType::RequestBody),
+            http_client: reqwest::blocking::ClientBuilder::new()
+                .redirect(Policy::none())
+                .build()?,
+        })
+    }
+
+    pub fn update_from_response(
+        &self,
+        token: &CoreTokenResponse,
+    ) -> Result<(
+        AccessToken,
+        Option<RefreshToken>,
+        CoreIdToken,
+        CoreIdTokenClaims,
+    )> {
+        let id_token = token
+            .extra_fields()
+            .id_token()
+            .ok_or_else(|| anyhow!("Server did not return an ID token"))?;
+
+        let claims = id_token.claims(&self.client.id_token_verifier(), DummyNonce)?;
+
+        // Verify access token hash
+        if let Some(expected_access_token_hash) = claims.access_token_hash() {
+            let actual_access_token_hash = AccessTokenHash::from_token(
+                token.access_token(),
+                id_token.signing_alg()?,
+                id_token.signing_key(&self.client.id_token_verifier())?,
+            )?;
+            if actual_access_token_hash != *expected_access_token_hash {
+                return Err(anyhow!("Invalid access token"));
+            }
+        }
+
+        let access_token = token.access_token();
+        let refresh_token = token.refresh_token();
+
+        self.store.set_access_token(access_token.secret())?;
+        if let Some(refresh_token) = refresh_token {
+            self.store.set_refresh_token(refresh_token.secret())?;
+        }
+        self.store.set_id_token(&id_token.to_string())?;
+
+        Ok((
+            access_token.clone(),
+            refresh_token.cloned(),
+            id_token.clone(),
+            claims.clone(),
+        ))
+    }
+
+    /// Get ID token claims, transparently refreshing it
+    pub fn id_token_claims(&self) -> Result<CoreIdTokenClaims> {
+        let id_token = CoreIdToken::from_str(&self.store.get_id_token()?)?;
+
+        let claims = id_token.claims(&self.client.id_token_verifier(), DummyNonce);
+
+        let claims = match claims {
+            Ok(claims) => claims,
+            Err(openidconnect::ClaimsVerificationError::Expired(_)) => {
+                info!("Token expired refreshing...");
+                let refresh_token = RefreshToken::new(self.store.get_refresh_token()?);
+                let response = &self
+                    .client
+                    .exchange_refresh_token(&refresh_token)?
+                    .request(&self.http_client)?;
+
+                &self.update_from_response(response)?.3
+            }
+            e => e?,
+        };
+
+        Ok(claims.clone())
+    }
 }
 
 pub struct KeyringTokenStore;
@@ -137,23 +250,12 @@ fn print_claims(claims: &CoreIdTokenClaims) {
     );
 }
 
-fn login(
-    http_client: reqwest::blocking::Client,
-    provider_metadata: DeviceProviderMetadata,
-    client_id: ClientId,
-) -> Result<()> {
-    let device_endpoint = provider_metadata
-        .additional_metadata()
-        .device_authorization_endpoint
-        .clone();
-
-    let client = CoreClient::from_provider_metadata(provider_metadata, client_id, None)
-        .set_device_authorization_url(device_endpoint)
-        .set_auth_type(AuthType::RequestBody);
-
+fn login(state: AuthState) -> Result<()> {
     println!("Fetching device code...");
-    let details: CoreDeviceAuthorizationResponse =
-        client.exchange_device_code().request(&http_client)?;
+    let details: CoreDeviceAuthorizationResponse = state
+        .client
+        .exchange_device_code()
+        .request(&state.http_client)?;
 
     println!(
         "Open this URL in your browser:\n{}\nand enter the code: {}",
@@ -161,85 +263,20 @@ fn login(
         details.user_code().secret()
     );
 
-    let token = client.exchange_device_access_token(&details)?.request(
-        &http_client,
-        std::thread::sleep,
-        None,
-    )?;
+    let response = state
+        .client
+        .exchange_device_access_token(&details)?
+        .request(&state.http_client, std::thread::sleep, None)?;
 
-    let id_token = token
-        .extra_fields()
-        .id_token()
-        .ok_or_else(|| anyhow!("Server did not return an ID token"))?;
-    let id_token_verifier = client.id_token_verifier();
-    let claims = id_token.claims(&id_token_verifier, DummyNonce)?;
+    let claims = state.update_from_response(&response)?.3;
 
-    // Verify access token hash
-    if let Some(expected_access_token_hash) = claims.access_token_hash() {
-        let actual_access_token_hash = AccessTokenHash::from_token(
-            token.access_token(),
-            id_token.signing_alg()?,
-            id_token.signing_key(&id_token_verifier)?,
-        )?;
-        if actual_access_token_hash != *expected_access_token_hash {
-            return Err(anyhow!("Invalid access token"));
-        }
-    }
-
-    print_claims(claims);
-
-    let token_store = KeyringTokenStore;
-
-    token_store.set_access_token(&token.access_token().secret())?;
-    if let Some(refresh_token) = token.refresh_token() {
-        token_store.set_refresh_token(refresh_token.secret())?;
-    }
-    token_store.set_id_token(&id_token.to_string())?;
+    print_claims(&claims);
 
     Ok(())
 }
 
-fn status(
-    http_client: reqwest::blocking::Client,
-    provider_metadata: DeviceProviderMetadata,
-    client_id: ClientId,
-) -> Result<()> {
-    let client = CoreClient::from_provider_metadata(provider_metadata, client_id, None);
-    let token_store = KeyringTokenStore;
-
-    let id_token = CoreIdToken::from_str(&token_store.get_id_token()?)?;
-
-    let claims = id_token.claims(&client.id_token_verifier(), DummyNonce);
-
-    let claims = match claims {
-        Ok(claims) => claims,
-        Err(openidconnect::ClaimsVerificationError::Expired(_)) => {
-            info!("Token expired refreshing...");
-            let refresh_token = RefreshToken::new(token_store.get_refresh_token()?);
-            let token = client
-                .exchange_refresh_token(&refresh_token)?
-                .request(&http_client)?;
-
-            let id_token = token
-                .extra_fields()
-                .id_token()
-                .ok_or_else(|| anyhow!("Server did not return an ID token"))?;
-
-            token_store.set_access_token(&token.access_token().secret())?;
-            if let Some(refresh_token) = token.refresh_token() {
-                token_store.set_refresh_token(refresh_token.secret())?;
-            }
-            token_store.set_id_token(&id_token.to_string())?;
-
-            let id_token = CoreIdToken::from_str(&token_store.get_id_token()?)?;
-            &id_token
-                .claims(&client.id_token_verifier(), DummyNonce)?
-                .clone()
-        }
-        e => e?,
-    };
-
-    print_claims(claims);
+fn status(state: AuthState) -> Result<()> {
+    print_claims(&state.id_token_claims()?);
     Ok(())
 }
 
@@ -263,9 +300,11 @@ pub fn auth_commands(command: AuthCommands) -> Result<()> {
     let provider_metadata =
         DeviceProviderMetadata::discover(&IssuerUrl::new(issuer_url)?, &http_client)?;
 
+    let auth_state = AuthState::new(KeyringTokenStore, provider_metadata, client_id)?;
+
     match command {
-        AuthCommands::Login => login(http_client, provider_metadata, client_id)?,
-        AuthCommands::Status => status(http_client, provider_metadata, client_id)?,
+        AuthCommands::Login => login(auth_state)?,
+        AuthCommands::Status => status(auth_state)?,
         AuthCommands::Logout => logout()?,
     }
     Ok(())
