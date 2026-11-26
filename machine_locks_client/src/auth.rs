@@ -60,6 +60,7 @@ pub trait TokenStore {
     fn get_access_token(&self) -> Result<String>;
     fn get_refresh_token(&self) -> Result<String>;
     fn get_id_token(&self) -> Result<String>;
+    fn logout(&self) -> Result<()>;
 }
 
 pub struct KeyringTokenStore;
@@ -111,6 +112,14 @@ impl TokenStore for KeyringTokenStore {
         KeyringTokenStore::id_entry()?
             .get_password()
             .context("Failed to get ID token. Run `machine-locks-client auth login` to login again")
+    }
+
+    fn logout(&self) -> Result<()> {
+        KeyringTokenStore::access_entry()?.delete_credential()?;
+        KeyringTokenStore::refresh_entry()?.delete_credential()?;
+        KeyringTokenStore::id_entry()?.delete_credential()?;
+
+        Ok(())
     }
 }
 
@@ -236,6 +245,11 @@ fn status(
     Ok(())
 }
 
+fn logout() -> Result<()> {
+    let token_store = KeyringTokenStore;
+    token_store.logout()
+}
+
 pub fn auth_commands(command: AuthCommands) -> Result<()> {
     let issuer_url = env::var("MACHINE_LOCKS_ISSUER_URL")
         .unwrap_or("https://sso.trustworthy.systems/realms/trustworthy_systems".to_string());
@@ -254,7 +268,7 @@ pub fn auth_commands(command: AuthCommands) -> Result<()> {
     match command {
         AuthCommands::Login => login(http_client, provider_metadata, client_id)?,
         AuthCommands::Status => status(http_client, provider_metadata, client_id)?,
-        _ => todo!(),
+        AuthCommands::Logout => logout()?,
     }
     Ok(())
 }
