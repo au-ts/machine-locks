@@ -7,6 +7,7 @@ use openidconnect::NonceVerifier;
 use openidconnect::OAuth2TokenResponse;
 use openidconnect::RefreshToken;
 use openidconnect::core::CoreIdToken;
+use openidconnect::core::CoreIdTokenClaims;
 use openidconnect::{
     AdditionalProviderMetadata, AuthType, ClientId, DeviceAuthorizationUrl, IssuerUrl,
     ProviderMetadata,
@@ -123,6 +124,19 @@ impl TokenStore for KeyringTokenStore {
     }
 }
 
+fn print_claims(claims: &CoreIdTokenClaims) {
+    println!(
+        "Authenticated as: {}\nsubject: {}.\nexpiry: {}",
+        claims
+            .preferred_username()
+            .map(|e| e.to_string())
+            .as_deref()
+            .unwrap_or("<username not set>"),
+        claims.subject().to_string(),
+        claims.expiration()
+    );
+}
+
 fn login(
     http_client: reqwest::blocking::Client,
     provider_metadata: DeviceProviderMetadata,
@@ -172,16 +186,8 @@ fn login(
         }
     }
 
-    println!(
-        "Authenticated as: {}\nsubject: {}.\nexpiry: {}",
-        claims
-            .preferred_username()
-            .map(|e| e.to_string())
-            .as_deref()
-            .unwrap_or("<username not set>"),
-        claims.subject().to_string(),
-        claims.expiration()
-    );
+    print_claims(claims);
+
     let token_store = KeyringTokenStore;
 
     token_store.set_access_token(&token.access_token().secret())?;
@@ -233,15 +239,7 @@ fn status(
         e => e?,
     };
 
-    println!(
-        "Authenticated as: {}\nsubject: {}",
-        claims
-            .preferred_username()
-            .map(|e| e.to_string())
-            .as_deref()
-            .unwrap_or("<username not set>"),
-        claims.subject().to_string()
-    );
+    print_claims(claims);
     Ok(())
 }
 
