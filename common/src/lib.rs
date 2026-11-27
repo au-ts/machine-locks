@@ -1,6 +1,10 @@
+// SPDX-FileCopyrightText: 2026 UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
 //! Common items for `machine_locks_client` and `machine_locks_server`
 
 use chrono::NaiveDateTime;
+use openidconnect::NonceVerifier;
 use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 use tabled::derive::display;
@@ -81,4 +85,13 @@ pub enum PollStatus {
     JobReady(Job),
     JobTimedOut(Job),
     Waiting,
+}
+
+/// Device code auth does not support nonces
+pub struct DummyNonce;
+
+impl NonceVerifier for DummyNonce {
+    fn verify(self, _nonce: Option<&openidconnect::Nonce>) -> Result<(), String> {
+        Ok(())
+    }
 }

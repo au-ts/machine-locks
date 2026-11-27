@@ -1,13 +1,16 @@
+// SPDX-FileCopyrightText: 2026 UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
+use common::DummyNonce;
 use log::info;
 use openidconnect::AccessToken;
 use openidconnect::AccessTokenHash;
 use openidconnect::EndpointMaybeSet;
 use openidconnect::EndpointNotSet;
 use openidconnect::EndpointSet;
-use openidconnect::NonceVerifier;
 use openidconnect::OAuth2TokenResponse;
 use openidconnect::RefreshToken;
 use openidconnect::core::CoreIdToken;
@@ -26,7 +29,9 @@ use openidconnect::{
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::fmt::Debug;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::AuthCommands;
 
@@ -50,17 +55,8 @@ type DeviceProviderMetadata = ProviderMetadata<
     CoreSubjectIdentifierType,
 >;
 
-/// Device code auth does not support nonces
-struct DummyNonce;
-
-impl NonceVerifier for DummyNonce {
-    fn verify(self, _nonce: Option<&openidconnect::Nonce>) -> Result<(), String> {
-        Ok(())
-    }
-}
-
 #[allow(dead_code)]
-pub trait TokenStore {
+pub trait TokenStore: Debug + Send + Sync {
     fn set_access_token(&self, token: &str) -> Result<()>;
     fn set_refresh_token(&self, token: &str) -> Result<()>;
     fn set_id_token(&self, token: &str) -> Result<()>;
@@ -79,31 +75,46 @@ pub type DiscoveredClient = CoreClient<
     EndpointMaybeSet,
 >;
 
+#[derive(Debug, Clone)]
 pub struct AuthState {
-    store: Box<dyn TokenStore>,
-    client: DiscoveredClient,
+    store: Arc<Box<dyn TokenStore>>,
+    pub client: DiscoveredClient,
     http_client: reqwest::blocking::Client,
+    pub issuer: IssuerUrl,
 }
 
 impl AuthState {
-    pub fn new(
-        store: impl TokenStore + 'static,
-        provider_metadata: DeviceProviderMetadata,
-        client_id: ClientId,
-    ) -> Result<Self> {
+    pub fn new(store: impl TokenStore + 'static) -> Result<Self> {
+        let issuer =
+            IssuerUrl::new(env::var("MACHINE_LOCKS_ISSUER_URL").unwrap_or(
+                "https://sso.trustworthy.systems/realms/trustworthy_systems".to_string(),
+            ))?;
+
+        let client_id =
+            ClientId::new(env::var("MACHINE_LOCKS_CLIENT_ID").unwrap_or("mq".to_string()));
+
+        // Not connecting to machine-locks-server API, so dedicated
+        // client that does not follow redirects
+        let http_client = reqwest::blocking::ClientBuilder::new()
+            .redirect(Policy::none())
+            .build()?;
+
+        let provider_metadata = DeviceProviderMetadata::discover(&issuer, &http_client)?;
+
         let device_endpoint = provider_metadata
             .additional_metadata()
             .device_authorization_endpoint
             .clone();
 
         Ok(Self {
-            store: Box::new(store),
+            store: Arc::new(Box::new(store)),
             client: CoreClient::from_provider_metadata(provider_metadata, client_id, None)
                 .set_device_authorization_url(device_endpoint)
                 .set_auth_type(AuthType::RequestBody),
             http_client: reqwest::blocking::ClientBuilder::new()
                 .redirect(Policy::none())
                 .build()?,
+            issuer,
         })
     }
 
@@ -152,8 +163,8 @@ impl AuthState {
         ))
     }
 
-    /// Get ID token claims, transparently refreshing it
-    pub fn id_token_claims(&self) -> Result<CoreIdTokenClaims> {
+    /// Get ID token claims and raw string, transparently refreshing it
+    pub fn id_token_claims(&self) -> Result<(CoreIdTokenClaims, String)> {
         let id_token = CoreIdToken::from_str(&self.store.get_id_token()?)?;
 
         let claims = id_token.claims(&self.client.id_token_verifier(), DummyNonce);
@@ -173,10 +184,11 @@ impl AuthState {
             e => e?,
         };
 
-        Ok(claims.clone())
+        Ok((claims.clone(), self.store.get_id_token()?))
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct KeyringTokenStore;
 
 impl KeyringTokenStore {
@@ -276,7 +288,7 @@ fn login(state: AuthState) -> Result<()> {
 }
 
 fn status(state: AuthState) -> Result<()> {
-    print_claims(&state.id_token_claims()?);
+    print_claims(&state.id_token_claims()?.0);
     Ok(())
 }
 
@@ -286,21 +298,7 @@ fn logout() -> Result<()> {
 }
 
 pub fn auth_commands(command: AuthCommands) -> Result<()> {
-    let issuer_url = env::var("MACHINE_LOCKS_ISSUER_URL")
-        .unwrap_or("https://sso.trustworthy.systems/realms/trustworthy_systems".to_string());
-
-    let client_id = ClientId::new(env::var("MACHINE_LOCKS_CLIENT_ID").unwrap_or("mq".to_string()));
-
-    // Not connecting to machine-locks-server API, so dedicated
-    // client that does not follow redirects
-    let http_client = reqwest::blocking::ClientBuilder::new()
-        .redirect(Policy::none())
-        .build()?;
-
-    let provider_metadata =
-        DeviceProviderMetadata::discover(&IssuerUrl::new(issuer_url)?, &http_client)?;
-
-    let auth_state = AuthState::new(KeyringTokenStore, provider_metadata, client_id)?;
+    let auth_state = AuthState::new(KeyringTokenStore)?;
 
     match command {
         AuthCommands::Login => login(auth_state)?,

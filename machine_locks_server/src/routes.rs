@@ -258,7 +258,6 @@ async fn poll_job(
     State(state): State<AppState>,
     Path((id,)): Path<(i64,)>,
 ) -> AppResult<Json<PollStatus>> {
-    // TODO: always advance queue even if a job is not polled
     let timeout_result = timeout(
         Duration::from_secs(
             env::var("SERVER_POLL_PERIOD")

@@ -37,6 +37,8 @@ Available variables:
 
 - `MACHINE_LOCKS_BASE_URL` _(optional)_: Base URL to make lock API requests to,
   must include a trailing slash.
+- `MACHINE_LOCKS_ISSUER_URL` _(optional)_: OIDC issuer URL for authentication.
+- `MACHINE_LOCKS_CLIENT_ID` _(optional)_: OIDC client ID for authentication.
 - `RUST_LOG` _(optional)_: Log verbosity, one of:
   - error (default)
   - warn

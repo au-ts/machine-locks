@@ -17,6 +17,7 @@ use openidconnect::reqwest::{
     Url,
     blocking::{Client, RequestBuilder},
 };
+use reqwest::header::HeaderName;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tabled::{
@@ -24,7 +25,7 @@ use tabled::{
     settings::{Color, Style, object::Rows},
 };
 
-use crate::auth::auth_commands;
+use crate::auth::{AuthState, KeyringTokenStore, auth_commands};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -140,10 +141,11 @@ enum MachineCommands {
 pub struct ApiClient {
     pub client: Client,
     pub base_url: Url,
+    pub auth_state: AuthState,
 }
 
 impl ApiClient {
-    pub fn new() -> Result<Self> {
+    pub fn new(auth_state: AuthState) -> Result<Self> {
         Ok(ApiClient {
             // TODO: configurable timeouts by env vars
             client: Client::builder()
@@ -154,19 +156,33 @@ impl ApiClient {
                 &env::var("MACHINE_LOCKS_BASE_URL")
                     .unwrap_or_else(|_| "https://trustworthy.systems/mq/".to_owned()),
             )?,
+            auth_state,
         })
     }
 
+    fn wrap_auth(&self, req: RequestBuilder) -> Result<RequestBuilder> {
+        Ok(req
+            .bearer_auth(self.auth_state.id_token_claims()?.1)
+            .header(
+                HeaderName::from_static("x-auth-client-id"),
+                self.auth_state.client.client_id().to_string(),
+            )
+            .header(
+                HeaderName::from_static("x-auth-issuer"),
+                self.auth_state.issuer.to_string(),
+            ))
+    }
+
     pub fn get(&self, endpoint: &str) -> Result<RequestBuilder> {
-        Ok(self.client.get(self.base_url.join(endpoint)?))
+        self.wrap_auth(self.client.get(self.base_url.join(endpoint)?))
     }
 
     pub fn post(&self, endpoint: &str) -> Result<RequestBuilder> {
-        Ok(self.client.post(self.base_url.join(endpoint)?))
+        self.wrap_auth(self.client.post(self.base_url.join(endpoint)?))
     }
 
     pub fn delete(&self, endpoint: &str) -> Result<RequestBuilder> {
-        Ok(self.client.delete(self.base_url.join(endpoint)?))
+        self.wrap_auth(self.client.delete(self.base_url.join(endpoint)?))
     }
 
     pub fn get_machine_by_name(&self, machine: &str) -> Result<Machine> {
@@ -479,7 +495,7 @@ fn sem_commands(client: &ApiClient, command: SemCommands) -> Result<()> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let client = ApiClient::new()?;
+    let client = ApiClient::new(AuthState::new(KeyringTokenStore)?)?;
     env_logger::init();
 
     match cli.command {

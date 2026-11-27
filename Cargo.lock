@@ -547,6 +547,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "dotenvy",
+ "openidconnect",
  "serde",
  "tabled",
 ]
@@ -1945,6 +1946,7 @@ dependencies = [
  "dotenvy",
  "env_logger",
  "log",
+ "openidconnect",
  "serde",
  "serde_json",
  "sqlx",
