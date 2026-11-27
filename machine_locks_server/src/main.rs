@@ -134,7 +134,7 @@ async fn main() -> Result<()> {
     info!("Loading JWKS keys");
     let mut keys = vec![];
 
-    for url in dotenvy::var("JWKS_URL")?.split(",") {
+    for url in dotenvy::var("JWKS_URLS")?.split(",") {
         let jwks = CoreJsonWebKeySet::fetch_async(&JsonWebKeySetUrl::new(url.to_owned())?, &client)
             .await?;
         keys.extend(jwks.keys().iter().cloned());
