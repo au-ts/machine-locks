@@ -20,7 +20,7 @@ use openidconnect::{
 use crate::AppState;
 
 #[derive(Debug, Clone)]
-pub struct AuthContext(CoreIdTokenClaims);
+pub struct AuthContext(pub CoreIdTokenClaims);
 
 /// Authentication middleware
 pub async fn layer(
@@ -75,7 +75,6 @@ pub async fn layer(
     let claims = token
         .claims(&verifier, DummyNonce)
         .map_err(|_| StatusCode::FORBIDDEN)?;
-    dbg!(claims);
 
     request.extensions_mut().insert(AuthContext(claims.clone()));
 

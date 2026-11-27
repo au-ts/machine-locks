@@ -76,6 +76,7 @@ pub struct Job {
     pub priority: i64,
     #[tabled(display("display::option", "-"))]
     pub job_name: Option<String>,
+    #[serde(default)]
     pub owner: String,
     pub machine_id: i64,
 }

@@ -186,6 +186,15 @@ impl AuthState {
 
         Ok((claims.clone(), self.store.get_id_token()?))
     }
+
+    pub fn username(&self) -> Result<String> {
+        Ok(self
+            .id_token_claims()?
+            .0
+            .preferred_username()
+            .ok_or(anyhow!("No username"))?
+            .to_string())
+    }
 }
 
 #[derive(Debug, Clone)]

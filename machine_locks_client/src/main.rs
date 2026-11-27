@@ -79,8 +79,6 @@ enum SemCommands {
         /// The machine name
         machine: String,
         #[arg(long)]
-        owner: String,
-        #[arg(long)]
         /// Optional job name
         job_name: Option<String>,
         #[arg(long)]
@@ -102,8 +100,6 @@ enum SemCommands {
     Release {
         /// The machine name
         machine: String,
-        #[arg(long)]
-        owner: String,
         #[arg(short, long)]
         /// Release the lock, even if you do not currently own it
         force: bool,
@@ -206,7 +202,6 @@ impl ApiClient {
     pub fn acquire(
         &self,
         machine_id: i64,
-        owner: &str,
         job_name: Option<&str>,
         priority: Option<i64>,
         no_timeout: bool,
@@ -215,7 +210,6 @@ impl ApiClient {
     ) -> Result<Job> {
         let mut payload = json!({
             "machine_id": machine_id,
-            "owner": owner,
             "job_name": job_name,
             "priority": priority.unwrap_or_default()
         });
@@ -285,12 +279,12 @@ impl ApiClient {
         result
     }
 
-    pub fn release(&self, machine_id: i64, owner: &str, force: bool) -> Result<()> {
+    pub fn release(&self, machine_id: i64, force: bool) -> Result<()> {
         let jobs = self.get_machine_jobs(machine_id)?;
 
         match jobs.first() {
             Some(active_job) if active_job.acquired_lock_at.is_some() => {
-                if force || active_job.owner == owner {
+                if force || active_job.owner == self.auth_state.username()? {
                     // This is not a race: the specific job ID is specified and releasing is idempotent
                     self.post(&format!("jobs/{}/release", active_job.id))?
                         .send()?
@@ -457,7 +451,6 @@ fn sem_commands(client: &ApiClient, command: SemCommands) -> Result<()> {
 
         SemCommands::Acquire {
             machine,
-            owner,
             job_name,
             priority,
             no_timeout,
@@ -467,7 +460,6 @@ fn sem_commands(client: &ApiClient, command: SemCommands) -> Result<()> {
             let machine = client.get_machine_by_name(&machine)?;
             let job = client.acquire(
                 machine.id,
-                &owner,
                 job_name.as_deref(),
                 priority,
                 no_timeout,
@@ -477,13 +469,9 @@ fn sem_commands(client: &ApiClient, command: SemCommands) -> Result<()> {
             dump_json(&job)?;
         }
 
-        SemCommands::Release {
-            machine,
-            owner,
-            force,
-        } => {
+        SemCommands::Release { machine, force } => {
             let machine = client.get_machine_by_name(&machine)?;
-            client.release(machine.id, &owner, force)?;
+            client.release(machine.id, force)?;
         }
         SemCommands::Cancel { id } => {
             client.cancel(id)?;

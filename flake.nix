@@ -50,6 +50,7 @@
         doCheck = false;
         buildInputs = [
           pkgs.aws-lc
+          pkgs.openssl
         ];
         cargoLock = {
           lockFile = ./Cargo.lock;

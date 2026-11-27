@@ -25,7 +25,7 @@
 use std::{env, time::Duration};
 
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
@@ -35,7 +35,7 @@ use serde_json::json;
 use sqlx::{query, query_as};
 use tokio::time::timeout;
 
-use crate::{AppError, AppResult, AppState};
+use crate::{AppError, AppResult, AppState, auth::AuthContext};
 use common::{Job, Machine, PollStatus};
 
 pub fn router() -> Router<AppState> {
@@ -195,6 +195,7 @@ async fn get_jobs(State(state): State<AppState>) -> AppResult<impl IntoResponse>
 
 async fn create_job(
     State(state): State<AppState>,
+    Extension(AuthContext(claims)): Extension<AuthContext>,
     Json(job): Json<Job>,
 ) -> AppResult<impl IntoResponse> {
     state
@@ -209,7 +210,10 @@ async fn create_job(
         job.timeout,
         job.priority,
         job.job_name,
-        job.owner,
+        &claims
+            .preferred_username()
+            .ok_or(AppError(StatusCode::BAD_REQUEST))?
+            .to_string(),
         job.machine_id
     )
     .fetch_one(&state.db)
